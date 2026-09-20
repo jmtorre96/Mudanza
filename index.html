@@ -60,7 +60,7 @@
         <div class="meter-bar" id="meterBar"></div>
         <span class="meter-num" id="meterNum">0 / 0</span>
       </div>
-      <span class="net" id="netBadge" hidden>Sin conexión</span>
+      <button class="net" id="netBadge" type="button" hidden>Sin conexión</button>
       <button class="btn btn-sm" id="btnCfg" aria-label="Ajustes">
         <svg class="ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -82,6 +82,13 @@
       <button class="tab" role="tab" data-tab="etiquetas" aria-selected="false">Etiquetas</button>
     </nav>
   </header>
+
+  <div class="alerta no-print" id="alertaAcceso" hidden>
+    <strong>Tu cuenta no tiene acceso a esta bitácora.</strong>
+    <span>Nada de lo que captures se va a guardar. Agrega
+      <b id="alertaCorreo"></b> a la tabla <code>permitidos</code> en Supabase
+      y vuelve a abrir la app.</span>
+  </div>
 
   <main id="main">
 
@@ -200,6 +207,33 @@
 
     <!-- ---------- MIS COSAS ---------- -->
     <section id="viewCosas" class="view wrap" hidden>
+      <button class="ctx" id="ctxCosasBar" aria-expanded="false" type="button">
+        <span class="ctx-line" id="ctxCosasLine">Estoy en: sin especificar</span>
+        <span class="ctx-edit">Cambiar</span>
+      </button>
+
+      <div class="ctx-panel" id="ctxCosasPanel" hidden>
+        <label class="fl">
+          <span>Estoy en</span>
+          <div class="seg" id="segCosaOrigen"></div>
+        </label>
+        <label class="fl">
+          <span>Cuarto o mueble</span>
+          <input type="text" id="cosaCuarto" list="dlCuartosCosas" placeholder="Sala, clóset, bodega…">
+          <datalist id="dlCuartosCosas"></datalist>
+        </label>
+        <label class="fl">
+          <span>Categoría</span>
+          <select id="cosaCatCtx"></select>
+        </label>
+        <input type="text" id="cosaCatOtra" placeholder="Nombre de la categoría" hidden>
+        <label class="fl">
+          <span>Va en (casa nueva)</span>
+          <select id="cosaDestinoCtx"></select>
+        </label>
+        <button class="btn btn-p" id="ctxCosasDone" type="button">Listo</button>
+      </div>
+
       <form class="cosa-add" id="cosaForm">
         <input type="text" id="cosaNombre" placeholder="Amplificador Sonos Amp" autocomplete="off" required>
         <div class="cosa-add-row">
@@ -220,6 +254,12 @@
         </div>
         <div class="tb-row"><div class="chips" id="chipsCosaEstado"></div></div>
         <div class="tb-row" id="catRow"></div>
+        <div class="tb-row" id="ubiRow"></div>
+        <div class="tb-row">
+          <span class="hint" id="cosasCuenta"></span>
+          <button class="btn btn-sm" id="cosasExcel" type="button" style="margin-left:auto">⤓ Excel</button>
+          <button class="btn btn-sm" id="cosasPdf" type="button">⎙ PDF</button>
+        </div>
       </div>
 
       <div class="cosas" id="cosasList"></div>
@@ -249,6 +289,12 @@
     <button data-tab="etiquetas" class="bn" aria-selected="false"><b>❏</b>Etiquetas</button>
   </nav>
 
+  <div class="selbar no-print" id="selBar" hidden>
+    <span id="selCount">0 seleccionadas</span>
+    <button class="btn btn-p btn-sm" id="selToBox" type="button">Mandar a una caja</button>
+    <button class="btn btn-sm" id="selClear" type="button">Cancelar</button>
+  </div>
+
   <div id="modalHost"></div>
   <div id="visor" class="visor" hidden>
     <img id="visorImg" alt="Foto del contenido del bulto">
@@ -256,6 +302,8 @@
   </div>
   <div id="toast" class="toast" hidden></div>
 </div>
+
+<div id="printArea"></div>
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

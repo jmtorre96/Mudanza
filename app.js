@@ -90,16 +90,25 @@
       { nombre: "Departamento",      clave: "DEP" },
       { nombre: "Casa de mis papás", clave: "BEL" }
     ],
-    destinos: ["Sala", "Comedor", "Cocina", "Alacena", "Recámara principal",
-      "Clóset principal", "Recámara 2", "Baño principal", "Baño de visitas",
-      "Cuarto de lavado", "Estudio", "Bodega", "Terraza", "Cochera"]
+    destinos: ["Sala", "Comedor", "Cocina", "Alacena", "Family PB",
+      "Baño de visitas", "Cuarto de lavado", "Terraza", "Cochera", "Bodega",
+      "Family PA", "Recámara principal", "Clóset principal", "Baño principal",
+      "Recámara 2", "Recámara 3", "Estudio"],
+    categorias: ["Cocina", "Alacena", "Lavandería y limpieza", "Baño",
+      "Blancos y ropa de cama", "Ropa", "Sala y comedor", "Electrónica",
+      "Audio y video", "Herramientas", "Jardín y exterior",
+      "Documentos y papelería", "Decoración", "Libros", "Deporte",
+      "Mascotas", "Niños", "Otros"]
   };
   var K = {
     bultos: "mudanza.cache.bultos",
     cosas:  "mudanza.cache.cosas",
     config: "mudanza.cache.config",
     queue:  "mudanza.queue",
-    ctx:    "mudanza.ctx"
+    ctx:    "mudanza.ctx",
+    ctxCosas: "mudanza.ctx.cosas",
+    pend:   "mudanza.pendientes",
+    diario: "mudanza.diario"
   };
 
   function estadoDef(k) {
@@ -113,7 +122,31 @@
 
   /* ---------------- estado ---------------- */
 
-  var sb = null, yo = "";
+  var sb = null, yo = "", miCorreo = "", sinAcceso = false;
+
+  // Le pregunta a la base si este correo está en "permitidos".
+  // Sin esto, un correo no autorizado puede capturar horas al vacío:
+  // el servidor rechaza cada renglón y la app no se entera hasta que
+  // se recarga y todo desaparece.
+  async function verificaAcceso() {
+    try {
+      var r = await sb.rpc("es_de_la_casa");
+      if (r.error) return;                 // versión vieja de la base: no bloqueamos
+      sinAcceso = (r.data === false);
+    } catch (e) { /* sin señal: no bloqueamos */ }
+    $("alertaCorreo").textContent = miCorreo || "tu correo";
+    $("alertaAcceso").hidden = !sinAcceso;
+    if (sinAcceso) {
+      $("btnSaveNext").disabled = true;
+      $("cosaForm").querySelector('button[type="submit"]').disabled = true;
+    }
+  }
+
+  function bloqueado() {
+    if (!sinAcceso) return false;
+    toast("Tu cuenta no tiene acceso: no se guarda nada. Revisa la tabla permitidos.");
+    return true;
+  }
   var S = {
     bultos: [],
     cosas: [],
@@ -121,7 +154,9 @@
     tab: "capturar",
     sesion: [],                 // códigos guardados en esta sesión
     filtros: { q: "", estados: {}, origenes: {}, destino: "", frag: false, first: false, traslado: "" },
-    filtrosCosas: { q: "", estados: {}, categoria: "" },
+    filtrosCosas: { q: "", estados: {}, categoria: "", ubicacion: "" },
+    ctxCosas: { origen: "", cuarto: "", destino: "", categoria: "" },
+    seleccion: {},
     ctx: {
       clave: "", cuarto_origen: "", destino: "", lugar: "",
       tipo: "caja", estado: "empacado", traslado: "mudanzera"
@@ -154,6 +189,55 @@
     t.textContent = msg; t.hidden = false;
     clearTimeout(toastT);
     toastT = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+
+  /* ==========================================================
+     RED DE SEGURIDAD DE LOS DATOS
+
+     Regla: un renglón que el servidor no ha confirmado NUNCA se
+     borra del teléfono, pase lo que pase. Y de todo lo que se
+     guarda queda una copia en un diario local que nadie sobrescribe.
+     ========================================================== */
+
+  function pendientes() { return ls(K.pend) || {}; }
+  function marcaPendiente(id, tabla) {
+    var p = pendientes(); p[id] = tabla; ls(K.pend, p);
+  }
+  function confirmaGuardado(id) {
+    var p = pendientes();
+    if (p[id]) { delete p[id]; ls(K.pend, p); }
+  }
+  function cuantasPendientes() { return Object.keys(pendientes()).length; }
+
+  // Diario: copia de todo lo capturado, que recargar() jamás toca.
+  // Es el último cable de seguridad si algo sale mal con la nube.
+  function alDiario(tabla, row) {
+    try {
+      var d = ls(K.diario) || [];
+      d.push({ t: tabla, en: new Date().toISOString(), row: row });
+      if (d.length > 2500) d = d.slice(-2500);
+      ls(K.diario, d);
+    } catch (e) { /* si no cabe, seguimos */ }
+  }
+
+  // Vuelve a intentar todo lo que quedó sin confirmar
+  async function reintentaPendientes() {
+    if (!sb || !navigator.onLine || sinAcceso) return;
+    var p = pendientes(), ids = Object.keys(p);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], tabla = p[id], row = null;
+      if (tabla === "cosas") {
+        for (var j = 0; j < S.cosas.length; j++) if (S.cosas[j].id === id) row = S.cosas[j];
+      } else {
+        for (var k = 0; k < S.bultos.length; k++) if (S.bultos[k].id === id) row = S.bultos[k];
+      }
+      if (!row) { confirmaGuardado(id); continue; }
+      try {
+        if (tabla === "cosas") await empujaCosa(row); else await empuja(row);
+        confirmaGuardado(id);
+      } catch (e) { if (esDeRed(e)) break; }
+    }
+    pintaRed();
   }
 
   /* ---------------- fotos ---------------- */
@@ -318,12 +402,20 @@
   function queue() { return ls(K.queue) || []; }
   function enqueue(op) { var q = queue(); q.push(op); ls(K.queue, q); pintaRed(); }
   function pintaRed() {
+    var sinConfirmar = cuantasPendientes();
     var n = queue().length + fotosPend;
     var b = $("netBadge");
     if (!b) return;
-    if (!navigator.onLine) { b.hidden = false; b.textContent = n ? "Sin conexión · " + n + " por subir" : "Sin conexión"; }
-    else if (n) { b.hidden = false; b.textContent = "Subiendo " + n + "…"; }
-    else b.hidden = true;
+    b.classList.toggle("net-alerta", sinConfirmar > 0);
+    if (sinConfirmar) {
+      b.hidden = false;
+      b.textContent = sinConfirmar + " sin guardar · reintentar";
+    } else if (!navigator.onLine) {
+      b.hidden = false;
+      b.textContent = n ? "Sin conexión · " + n + " por subir" : "Sin conexión";
+    } else if (n) {
+      b.hidden = false; b.textContent = "Subiendo " + n + "…";
+    } else b.hidden = true;
   }
 
   var vaciando = false;
@@ -501,6 +593,7 @@
 
     var u = (await sb.auth.getUser()).data.user;
     var correo = (u && u.email) || "";
+    miCorreo = correo;
     yo = correo.split("@")[0].replace(/[._-]/g, " ");
     yo = yo.charAt(0).toUpperCase() + yo.slice(1);
 
@@ -510,11 +603,15 @@
     if (Array.isArray(cs)) S.cosas = cs;
     if (cc) S.config = cc;
     if (cx) S.ctx = Object.assign(S.ctx, cx);
+    var cxc = ls(K.ctxCosas);
+    if (cxc) S.ctxCosas = Object.assign(S.ctxCosas, cxc);
 
     $("app").hidden = false;
     $("boot").hidden = true;
     pintaCtxControles();
     render();
+
+    await verificaAcceso();
 
     var ok = await recargar();
     if (!ok && !S.bultos.length) {
@@ -532,31 +629,33 @@
       if (rc.data) {
         S.config = {
           origenes: (rc.data.origenes && rc.data.origenes.length) ? rc.data.origenes : CFG_DEF.origenes,
-          destinos: rc.data.destinos || CFG_DEF.destinos
+          destinos: rc.data.destinos || CFG_DEF.destinos,
+          categorias: (rc.data.categorias && rc.data.categorias.length) ? rc.data.categorias : CFG_DEF.categorias
         };
         ls(K.config, S.config);
       }
       var rb = await sb.from("bultos").select("*");
       if (rb.error) throw rb.error;
       // lo que sigue en la cola manda sobre lo que vino del servidor
-      var pend = {}, pendC = {};
-      queue().forEach(function (op) {
-        if (op.t !== "upsert") return;
-        if (op.tabla === "cosas") pendC[op.row.id] = op.row; else pend[op.row.id] = op.row;
-      });
-      S.bultos = rb.data.map(function (r) { return pend[r.id] || r; });
-      queue().forEach(function (op) {
-        if (op.t === "upsert" && op.tabla !== "cosas" &&
-            !S.bultos.some(function (b) { return b.id === op.row.id; })) S.bultos.push(op.row);
+      // Lo que el servidor todavía no confirma MANDA sobre lo que responde,
+      // y si no viene en su respuesta, se conserva. Ésta es la regla que
+      // evita que una recarga se lleve lo capturado.
+      var pen = pendientes();
+      var localB = {}, localC = {};
+      S.bultos.forEach(function (b) { if (pen[b.id]) localB[b.id] = b; });
+      S.cosas.forEach(function (c) { if (pen[c.id]) localC[c.id] = c; });
+
+      S.bultos = rb.data.map(function (r) { return localB[r.id] || r; });
+      Object.keys(localB).forEach(function (id) {
+        if (!S.bultos.some(function (b) { return b.id === id; })) S.bultos.push(localB[id]);
       });
       ls(K.bultos, S.bultos);
 
       var rcos = await sb.from("cosas").select("*");
       if (!rcos.error) {
-        S.cosas = rcos.data.map(function (r) { return pendC[r.id] || r; });
-        queue().forEach(function (op) {
-          if (op.t === "upsert" && op.tabla === "cosas" &&
-              !S.cosas.some(function (c) { return c.id === op.row.id; })) S.cosas.push(op.row);
+        S.cosas = rcos.data.map(function (r) { return localC[r.id] || r; });
+        Object.keys(localC).forEach(function (id) {
+          if (!S.cosas.some(function (c) { return c.id === id; })) S.cosas.push(localC[id]);
         });
         ls(K.cosas, S.cosas);
       }
@@ -593,7 +692,8 @@
           if (p.new) {
             S.config = {
               origenes: (p.new.origenes && p.new.origenes.length) ? p.new.origenes : CFG_DEF.origenes,
-              destinos: p.new.destinos || CFG_DEF.destinos
+              destinos: p.new.destinos || CFG_DEF.destinos,
+              categorias: (p.new.categorias && p.new.categorias.length) ? p.new.categorias : CFG_DEF.categorias
             };
             ls(K.config, S.config); pintaCtxControles(); render();
           }
@@ -607,25 +707,31 @@
      ===================================================== */
 
   async function guardar(row, aviso) {
+    if (bloqueado()) return;
     row.actualizado_en = new Date().toISOString();
     row.actualizado_por = yo;
     mergeLocal(row);
+    marcaPendiente(row.id, "bultos");
+    alDiario("bultos", row);
     render();
     try {
       if (!navigator.onLine) throw new Error("offline");
       await empuja(row);
+      confirmaGuardado(row.id);
       if (aviso) toast(aviso);
     } catch (e) {
       if (esDeRed(e)) {
         enqueue({ t: "upsert", row: row });
         if (aviso) toast(aviso + " · se sube al volver la señal");
       } else {
-        toast("No se pudo guardar: " + (e.message || e));
+        toast(mensajeDeError(e));
       }
     }
   }
 
   async function borrar(id) {
+    if (bloqueado()) return;
+    confirmaGuardado(id);
     var previo = bultoPorId(id);
     var susFotos = (previo && previo.fotos) || [];
     quitaLocal(id); render();
@@ -1414,13 +1520,36 @@
       ld.appendChild(el("span", "hint", "Un cuarto por renglón."));
       body.appendChild(ld);
 
+      var taC = el("textarea"); taC.style.minHeight = "150px";
+      taC.value = (S.config.categorias || CFG_DEF.categorias).join("\n");
+      var lc = el("label", "fl");
+      lc.appendChild(el("span", null, "Categorías"));
+      lc.appendChild(taC);
+      lc.appendChild(el("span", "hint",
+        "Una por renglón. Son las opciones de “Categoría” en Mis cosas."));
+      body.appendChild(lc);
+
       var exps = el("div"); exps.style.display = "flex"; exps.style.gap = "8px"; exps.style.flexWrap = "wrap";
       var exp = el("button", "btn btn-sm", "Respaldo de bultos (CSV)");
       exp.type = "button"; exp.onclick = exportaCSV;
       var exp2 = el("button", "btn btn-sm", "Respaldo de mis cosas (CSV)");
       exp2.type = "button"; exp2.onclick = exportaCosasCSV;
-      exps.appendChild(exp); exps.appendChild(exp2);
+      var exp3 = el("button", "btn btn-sm", "Copia local de emergencia (JSON)");
+      exp3.type = "button";
+      exp3.onclick = function () {
+        var d = ls(K.diario) || [];
+        if (!d.length) { toast("El diario local está vacío."); return; }
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)],
+          { type: "application/json" }));
+        a.download = "mudanza-diario-" + new Date().toISOString().slice(0, 10) + ".json";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      };
+      exps.appendChild(exp); exps.appendChild(exp2); exps.appendChild(exp3);
       body.appendChild(exps);
+      body.appendChild(el("span", "hint",
+        "El diario guarda en este teléfono una copia de todo lo que capturaste, " +
+        "aunque la nube haya fallado. Tiene " + ((ls(K.diario) || []).length) + " registros."));
 
       var save = el("button", "btn btn-p", "Guardar");
       save.onclick = async function () {
@@ -1432,11 +1561,14 @@
             return { nombre: nombre, clave: clave };
           }).filter(function (o) { return o.nombre; });
         var dest = taD.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+        var cats = taC.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
         if (!origenes.length) { toast("Deja al menos un origen."); return; }
         save.disabled = true;
-        var r = await sb.from("config").upsert({ id: 1, origenes: origenes, destinos: dest });
+        var r = await sb.from("config").upsert({
+          id: 1, origenes: origenes, destinos: dest, categorias: cats
+        });
         if (r.error) { toast("No se pudo guardar: " + r.error.message); save.disabled = false; return; }
-        S.config = { origenes: origenes, destinos: dest };
+        S.config = { origenes: origenes, destinos: dest, categorias: cats };
         ls(K.config, S.config);
         pintaCtxControles(); render(); cerrar();
       };
@@ -1460,14 +1592,14 @@
   }
 
   function exportaCosasCSV() {
-    var cab = ["nombre", "cantidad", "categoria", "estado", "destino", "bulto",
+    var cab = ["nombre", "cantidad", "categoria", "estado", "donde_esta", "destino", "bulto",
       "precio_unitario", "total", "notas"];
     var filas = cosasOrdenadas().map(function (c) {
       var b = c.bulto_id ? bultoPorId(c.bulto_id) : null;
       var n = parseInt(c.cantidad, 10) || 0;
       return [
         csvq(c.nombre), csvq(n), csvq(c.categoria), csvq(estadoCosa(c.estado).n),
-        csvq(c.destino), csvq(b ? b.code : ""),
+        csvq(c.ubicacion), csvq(c.destino), csvq(b ? b.code : ""),
         csvq(c.precio == null ? "" : c.precio),
         csvq(c.precio == null ? "" : c.precio * n),
         csvq(c.notas)
@@ -1490,25 +1622,45 @@
      ===================================================== */
 
   async function guardarCosa(row, aviso) {
+    if (bloqueado()) return;
     row.actualizado_en = new Date().toISOString();
     row.actualizado_por = yo;
     mergeCosa(row);
+    marcaPendiente(row.id, "cosas");
+    alDiario("cosas", row);
     render();
     try {
       if (!navigator.onLine) throw new Error("offline");
       await empujaCosa(row);
+      confirmaGuardado(row.id);
       if (aviso) toast(aviso);
     } catch (e) {
       if (esDeRed(e)) {
         enqueue({ t: "upsert", tabla: "cosas", row: row });
         if (aviso) toast(aviso + " · se sube al volver la señal");
       } else {
-        toast("No se pudo guardar: " + (e.message || e));
+        // El servidor lo rechazó. El renglón se queda marcado como
+        // pendiente y NO se borra: el usuario decide si lo reintenta.
+        toast(mensajeDeError(e));
       }
     }
   }
 
+  // Traduce los errores del servidor a algo accionable
+  function mensajeDeError(e) {
+    var m = String((e && e.message) || e);
+    if (/row-level security|violates row-level/i.test(m)) {
+      return "Tu cuenta no tiene permiso para guardar. Revisa la tabla permitidos en Supabase.";
+    }
+    if (/column .* does not exist|schema cache/i.test(m)) {
+      return "Falta correr el SQL más reciente en Supabase.";
+    }
+    return "No se pudo guardar: " + m;
+  }
+
   async function borrarCosa(id) {
+    if (bloqueado()) return;
+    confirmaGuardado(id);
     S.cosas = S.cosas.filter(function (c) { return c.id !== id; });
     ls(K.cosas, S.cosas); render();
     try {
@@ -1521,7 +1673,111 @@
     }
   }
 
+  /* ---------- dónde estoy mientras catalogo ---------- */
+
+  function lugaresPosibles() {
+    var l = S.config.origenes.map(function (o) { return o.nombre; });
+    l.push("Casa nueva");
+    return l;
+  }
+  function ubicaciones() {
+    var s = {};
+    S.cosas.forEach(function (c) { if (c.ubicacion) s[c.ubicacion] = 1; });
+    return Object.keys(s).sort(function (a, b) { return a.localeCompare(b, "es"); });
+  }
+  function cuartosDeCosas() {
+    var s = {};
+    S.cosas.forEach(function (c) {
+      var p = String(c.ubicacion || "").split(" · ");
+      if (p[1]) s[p[1]] = 1;
+    });
+    cuartosOrigenUsados().forEach(function (c) { s[c] = 1; });
+    return Object.keys(s).sort(function (a, b) { return a.localeCompare(b, "es"); });
+  }
+  function ubicacionActual() {
+    return [S.ctxCosas.origen, S.ctxCosas.cuarto].filter(Boolean).join(" · ");
+  }
+  function guardaCtxCosas() { ls(K.ctxCosas, S.ctxCosas); }
+
+  function pintaCtxCosas() {
+    var seg = $("segCosaOrigen"); clear(seg);
+    lugaresPosibles().forEach(function (n) {
+      var b = el("button", null, n);
+      b.type = "button";
+      b.setAttribute("aria-pressed", S.ctxCosas.origen === n ? "true" : "false");
+      b.onclick = function () {
+        S.ctxCosas.origen = (S.ctxCosas.origen === n) ? "" : n;
+        guardaCtxCosas(); pintaCtxCosas();
+      };
+      seg.appendChild(b);
+    });
+
+    var dl = $("dlCuartosCosas"); clear(dl);
+    cuartosDeCosas().forEach(function (c) { dl.appendChild(new Option(c)); });
+    $("cosaCuarto").value = S.ctxCosas.cuarto || "";
+
+    var sc = $("cosaCatCtx"); clear(sc);
+    sc.appendChild(new Option("— sin categoría —", ""));
+    categorias().forEach(function (c) { sc.appendChild(new Option(c, c)); });
+    sc.appendChild(new Option("+ Otra…", "__otra__"));
+    var cat = S.ctxCosas.categoria || "";
+    sc.value = (cat && categorias().indexOf(cat) >= 0) ? cat : (cat ? "__otra__" : "");
+    $("cosaCatOtra").hidden = sc.value !== "__otra__";
+    $("cosaCatOtra").value = sc.value === "__otra__" ? cat : "";
+
+    var sd = $("cosaDestinoCtx"); clear(sd);
+    sd.appendChild(new Option("— sin asignar —", ""));
+    destinos().forEach(function (d) { sd.appendChild(new Option(d, d)); });
+    sd.value = S.ctxCosas.destino || "";
+
+    var u = ubicacionActual();
+    var partes = ["Estoy en: " + (u || "sin especificar")];
+    if (S.ctxCosas.categoria) partes.push(S.ctxCosas.categoria);
+    $("ctxCosasLine").textContent = partes.join("  ·  ")
+      + (S.ctxCosas.destino ? "  →  " + S.ctxCosas.destino : "");
+  }
+
+  function leeCtxCosas() {
+    S.ctxCosas.cuarto = $("cosaCuarto").value.trim();
+    S.ctxCosas.destino = $("cosaDestinoCtx").value;
+    var sc = $("cosaCatCtx");
+    S.ctxCosas.categoria = (sc.value === "__otra__")
+      ? $("cosaCatOtra").value.trim()
+      : sc.value;
+    guardaCtxCosas();
+  }
+  $("cosaCuarto").addEventListener("change", function () { leeCtxCosas(); pintaCtxCosas(); });
+  $("cosaDestinoCtx").addEventListener("change", function () { leeCtxCosas(); pintaCtxCosas(); });
+  $("cosaCatOtra").addEventListener("change", function () { leeCtxCosas(); });
+  $("cosaCatCtx").addEventListener("change", function () {
+    var sc = $("cosaCatCtx");
+    $("cosaCatOtra").hidden = sc.value !== "__otra__";
+    if (!$("cosaCatOtra").hidden) { $("cosaCatOtra").focus(); return; }
+    leeCtxCosas(); pintaCtxCosas();
+  });
+
+  $("ctxCosasBar").onclick = function () {
+    var p = $("ctxCosasPanel"), abierto = !p.hidden;
+    p.hidden = abierto;
+    $("ctxCosasBar").setAttribute("aria-expanded", abierto ? "false" : "true");
+    if (!abierto) $("cosaCuarto").focus();
+  };
+  $("ctxCosasDone").onclick = function () {
+    leeCtxCosas();
+    $("ctxCosasPanel").hidden = true;
+    $("ctxCosasBar").setAttribute("aria-expanded", "false");
+    pintaCtxCosas();
+    $("cosaNombre").focus();
+  };
+
+  // Las de los ajustes más las que hayan escrito a mano
   function categorias() {
+    var s = {};
+    (S.config.categorias || CFG_DEF.categorias).forEach(function (c) { if (c) s[c] = 1; });
+    S.cosas.forEach(function (c) { if (c.categoria) s[c.categoria] = 1; });
+    return Object.keys(s).sort(function (a, b) { return a.localeCompare(b, "es"); });
+  }
+  function categoriasUsadas() {
     var s = {};
     S.cosas.forEach(function (c) { if (c.categoria) s[c.categoria] = 1; });
     return Object.keys(s).sort(function (a, b) { return a.localeCompare(b, "es"); });
@@ -1537,8 +1793,9 @@
     var F = S.filtrosCosas;
     if (Object.keys(F.estados).length && !F.estados[c.estado]) return false;
     if (F.categoria && (c.categoria || "") !== F.categoria) return false;
+    if (F.ubicacion && (c.ubicacion || "") !== F.ubicacion) return false;
     if (F.q) {
-      var hay = [c.nombre, c.categoria, c.destino, c.notas].join(" ").toLowerCase();
+      var hay = [c.nombre, c.categoria, c.ubicacion, c.destino, c.notas].join(" ").toLowerCase();
       var t = F.q.toLowerCase().split(/\s+/).filter(Boolean);
       for (var i = 0; i < t.length; i++) if (hay.indexOf(t[i]) < 0) return false;
     }
@@ -1560,6 +1817,7 @@
   }
 
   function pintaCosas() {
+    pintaCtxCosas();
     // --- resumen de arriba ---
     var stats = $("cosasStats"); clear(stats);
     var sr = el("div", "stat-row");
@@ -1607,9 +1865,21 @@
     sel.onchange = function () { S.filtrosCosas.categoria = sel.value; render(); };
     cr.appendChild(sel);
 
+    var ur = $("ubiRow"); clear(ur);
+    ur.appendChild(el("span", "hint", "Dónde está:"));
+    var su = el("select"); su.style.maxWidth = "240px";
+    su.appendChild(new Option("Donde sea", ""));
+    ubicaciones().forEach(function (u) { su.appendChild(new Option(u, u)); });
+    su.value = S.filtrosCosas.ubicacion;
+    su.onchange = function () { S.filtrosCosas.ubicacion = su.value; render(); };
+    ur.appendChild(su);
+
     // --- lista ---
     var host = $("cosasList"); clear(host);
     var list = cosasOrdenadas().filter(coincideCosa);
+    $("cosasCuenta").textContent = list.length
+      ? list.length + (list.length === 1 ? " renglón" : " renglones")
+      : "";
     if (!list.length) {
       var v = el("div", "empty");
       v.appendChild(el("b", null, S.cosas.length ? "Nada con esos filtros" : "Todavía no hay nada anotado"));
@@ -1625,7 +1895,23 @@
   function filaCosa(c) {
     var e = estadoCosa(c.estado);
     var row = el("div", "cosa");
+    if (S.seleccion[c.id]) row.className = "cosa elegida";
     var st = el("div", "stripe"); st.style.background = colVar(e.c); row.appendChild(st);
+
+    var sel = el("div", "cosa-sel");
+    var chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = !!S.seleccion[c.id];
+    chk.setAttribute("aria-label", "Seleccionar " + (c.nombre || ""));
+    // sólo se repinta este renglón: con cientos de cosas, repintar todo
+    // hace saltar la lista y pierde el scroll
+    chk.onchange = function () {
+      if (chk.checked) S.seleccion[c.id] = true; else delete S.seleccion[c.id];
+      row.className = S.seleccion[c.id] ? "cosa elegida" : "cosa";
+      pintaSelBar();
+    };
+    sel.appendChild(chk);
+    row.appendChild(sel);
 
     var cant = el("div", "cosa-cant");
     var menos = el("button", null, "−");
@@ -1643,8 +1929,9 @@
     var mid = el("div", "cosa-mid");
     mid.appendChild(el("div", "cosa-nom", c.nombre || "(sin nombre)"));
     var meta = [];
+    if (c.ubicacion) meta.push(c.ubicacion);
     if (c.categoria) meta.push(c.categoria);
-    if (c.destino) meta.push(c.destino);
+    if (c.destino) meta.push("→ " + c.destino);
     if (c.bulto_id) {
       var b = bultoPorId(c.bulto_id);
       if (b) meta.push(b.code);
@@ -1676,12 +1963,14 @@
     ev.preventDefault();
     var nombre = $("cosaNombre").value.trim();
     if (!nombre) return;
+    leeCtxCosas();
     var row = {
       id: uuid(),
       nombre: nombre,
       cantidad: Math.max(1, parseInt($("cosaCant").value, 10) || 1),
-      categoria: "",
-      destino: "",
+      categoria: S.ctxCosas.categoria || "",
+      ubicacion: ubicacionActual(),
+      destino: S.ctxCosas.destino || "",
       estado: $("cosaEstado").value,
       precio: null,
       notas: "",
@@ -1715,6 +2004,12 @@
       var dl = el("datalist"); dl.id = "dlCats";
       categorias().forEach(function (x) { dl.appendChild(new Option(x)); });
 
+      var inU = el("input"); inU.type = "text"; inU.value = c.ubicacion || "";
+      inU.setAttribute("list", "dlUbis");
+      inU.placeholder = "Departamento · Sala";
+      var dlu = el("datalist"); dlu.id = "dlUbis";
+      ubicaciones().forEach(function (u) { dlu.appendChild(new Option(u)); });
+
       var selD = el("select");
       selD.appendChild(new Option("— sin asignar —", ""));
       destinos().forEach(function (d) { selD.appendChild(new Option(d, d)); });
@@ -1743,6 +2038,8 @@
       f2.appendChild(campo("Precio por unidad", inP, "Sólo si quieres presupuestar."));
       body.appendChild(f2);
       body.appendChild(dl);
+      body.appendChild(campo("Dónde está ahora", inU, "Dónde lo tienes hoy, antes de mover nada."));
+      body.appendChild(dlu);
       body.appendChild(campo("Va en (casa nueva)", selD));
       body.appendChild(campo("¿En qué bulto viaja?", selB, "Para encontrarlo después."));
       body.appendChild(campo("Notas", taN));
@@ -1755,6 +2052,7 @@
           cantidad: Math.max(0, parseInt(inC.value, 10) || 0),
           estado: selE.value,
           categoria: inCat.value.trim(),
+          ubicacion: inU.value.trim(),
           destino: selD.value,
           precio: inP.value === "" ? null : Number(inP.value),
           bulto_id: selB.value || null,
@@ -1771,6 +2069,295 @@
       foot.appendChild(del);
     });
   }
+
+  /* ---------- armar una caja desde la lista ---------- */
+
+  function elegidas() {
+    return S.cosas.filter(function (c) { return S.seleccion[c.id]; });
+  }
+  function pintaSelBar() {
+    var n = elegidas().length;
+    var bar = $("selBar");
+    bar.hidden = (n === 0 || S.tab !== "cosas");
+    if (n) $("selCount").textContent = n + (n === 1 ? " seleccionada" : " seleccionadas");
+  }
+  $("selClear").onclick = function () { S.seleccion = {}; render(); };
+  $("selToBox").onclick = function () { abreMandarACaja(); };
+
+  function renglonDeCosa(c) {
+    var n = parseInt(c.cantidad, 10) || 0;
+    return (n > 1 ? n + " × " : "") + (c.nombre || "");
+  }
+
+  function abreMandarACaja() {
+    var cosas = elegidas();
+    if (!cosas.length) return;
+
+    abreModal("Mandar " + cosas.length + (cosas.length === 1 ? " cosa" : " cosas") + " a una caja",
+      function (body, foot, cerrar) {
+      function campo(t, ctrl, hint) {
+        var l = el("label", "fl"); l.appendChild(el("span", null, t)); l.appendChild(ctrl);
+        if (hint) l.appendChild(el("span", "hint", hint));
+        return l;
+      }
+
+      // qué se va a meter
+      var lista = el("ul", "contents");
+      cosas.forEach(function (c) { lista.appendChild(el("li", null, renglonDeCosa(c))); });
+      var cont = el("div"); cont.style.display = "grid"; cont.style.gap = "5px";
+      cont.appendChild(el("span", "hint", "Va a quedar adentro:"));
+      cont.appendChild(lista);
+      body.appendChild(cont);
+
+      // nueva o existente
+      var modo = "nueva";
+      var seg = el("div", "seg");
+      var bNueva = el("button", null, "Caja nueva");
+      var bExist = el("button", null, "Caja que ya existe");
+      bNueva.type = "button"; bExist.type = "button";
+      seg.appendChild(bNueva); seg.appendChild(bExist);
+      body.appendChild(seg);
+
+      // --- caja nueva ---
+      var boxNueva = el("div"); boxNueva.style.display = "grid"; boxNueva.style.gap = "13px";
+
+      var claveIni = S.ctx.clave || (S.config.origenes[0] || {}).clave || "BLT";
+      S.config.origenes.forEach(function (o) {
+        if (o.nombre === S.ctxCosas.origen) claveIni = o.clave;
+      });
+      var claveSel = claveIni;
+
+      var codeView = el("div", "cap-code");
+      codeView.appendChild(el("span", "cap-code-k", "Escribe en la caja"));
+      var codeVal = el("span", "cap-code-v", siguienteCodigo(claveSel));
+      codeVal.style.fontSize = "30px";
+      codeView.appendChild(codeVal);
+      boxNueva.appendChild(codeView);
+
+      var segO = el("div", "seg");
+      S.config.origenes.forEach(function (o) {
+        var b = el("button", null, o.nombre);
+        b.type = "button";
+        b.setAttribute("aria-pressed", claveSel === o.clave ? "true" : "false");
+        b.onclick = function () {
+          claveSel = o.clave;
+          codeVal.textContent = siguienteCodigo(claveSel);
+          [].forEach.call(segO.children, function (x) {
+            x.setAttribute("aria-pressed", x.textContent === o.nombre ? "true" : "false");
+          });
+        };
+        segO.appendChild(b);
+      });
+      boxNueva.appendChild(campo("Viene de", segO));
+
+      var selDest = el("select");
+      selDest.appendChild(new Option("— elegir cuarto —", ""));
+      destinos().forEach(function (d) { selDest.appendChild(new Option(d, d)); });
+      // sugiere el destino que más se repite entre lo seleccionado
+      var votos = {};
+      cosas.forEach(function (c) { if (c.destino) votos[c.destino] = (votos[c.destino] || 0) + 1; });
+      var mejor = "";
+      Object.keys(votos).forEach(function (d) { if (!mejor || votos[d] > votos[mejor]) mejor = d; });
+      selDest.value = mejor || S.ctxCosas.destino || S.ctx.destino || "";
+      boxNueva.appendChild(campo("Va en (casa nueva)", selDest));
+
+      var inLugar = el("input"); inLugar.type = "text";
+      inLugar.placeholder = "Alacena, repisa de arriba";
+      boxNueva.appendChild(campo("Dónde se guarda", inLugar));
+
+      var segT = el("div", "seg");
+      var trasSel = S.ctx.traslado || "mudanzera";
+      TRASLADOS.forEach(function (t) {
+        var b = el("button", null, t.n);
+        b.type = "button";
+        b.setAttribute("aria-pressed", trasSel === t.k ? "true" : "false");
+        b.onclick = function () {
+          trasSel = t.k;
+          [].forEach.call(segT.children, function (x) {
+            x.setAttribute("aria-pressed", x.textContent === t.n ? "true" : "false");
+          });
+        };
+        segT.appendChild(b);
+      });
+      boxNueva.appendChild(campo("Quién lo traslada", segT));
+
+      var chkF = document.createElement("input"); chkF.type = "checkbox";
+      var lF = el("label", "chk"); lF.appendChild(chkF); lF.appendChild(document.createTextNode("Frágil"));
+      boxNueva.appendChild(lF);
+
+      // --- caja existente ---
+      var boxExist = el("div"); boxExist.hidden = true;
+      // la más reciente primero: normalmente es la que estás llenando
+      var selBulto = el("select");
+      S.bultos.slice().sort(function (a, b) {
+        return String(b.creado_en || "").localeCompare(String(a.creado_en || ""));
+      }).forEach(function (b) {
+        selBulto.appendChild(new Option(b.code + " · " + (b.destino || "sin asignar"), b.id));
+      });
+      if (!ordenados().length) {
+        selBulto.appendChild(new Option("todavía no hay cajas", ""));
+        selBulto.disabled = true;
+      }
+      boxExist.appendChild(campo("¿A cuál?", selBulto,
+        "Lo seleccionado se agrega al contenido de esa caja."));
+
+      body.appendChild(boxNueva);
+      body.appendChild(boxExist);
+
+      function pintaModo() {
+        bNueva.setAttribute("aria-pressed", modo === "nueva" ? "true" : "false");
+        bExist.setAttribute("aria-pressed", modo === "existente" ? "true" : "false");
+        boxNueva.hidden = modo !== "nueva";
+        boxExist.hidden = modo !== "existente";
+      }
+      bNueva.onclick = function () { modo = "nueva"; pintaModo(); };
+      bExist.onclick = function () { modo = "existente"; pintaModo(); };
+      pintaModo();
+
+      var ok = el("button", "btn btn-p", "Meter a la caja");
+      ok.onclick = async function () {
+        ok.disabled = true; ok.textContent = "Guardando…";
+        try {
+          var destinoCaja, bulto;
+
+          if (modo === "nueva") {
+            var origenNombre = nombreOrigen(claveSel);
+            bulto = {
+              id: uuid(),
+              code: siguienteCodigo(claveSel),
+              clave: claveSel,
+              origen: origenNombre,
+              cuarto_origen: S.ctxCosas.cuarto || "",
+              tipo: "caja",
+              estado: "empacado",
+              destino: selDest.value,
+              lugar: inLugar.value.trim(),
+              traslado: trasSel,
+              contenido: cosas.map(renglonDeCosa),
+              notas: "",
+              fotos: [],
+              fragil: chkF.checked,
+              abrir_primero: false,
+              creado_en: new Date().toISOString()
+            };
+            await guardar(bulto);
+          } else {
+            var destino = bultoPorId(selBulto.value);
+            if (!destino) { toast("Elige una caja."); ok.disabled = false; ok.textContent = "Meter a la caja"; return; }
+            bulto = Object.assign({}, destino, {
+              contenido: (destino.contenido || []).concat(cosas.map(renglonDeCosa))
+            });
+            await guardar(bulto);
+          }
+          destinoCaja = bulto.destino;
+
+          for (var i = 0; i < cosas.length; i++) {
+            await guardarCosa(Object.assign({}, cosas[i], {
+              bulto_id: bulto.id,
+              destino: cosas[i].destino || destinoCaja || ""
+            }));
+          }
+
+          S.seleccion = {};
+          cerrar();
+          toast(cosas.length + (cosas.length === 1 ? " cosa" : " cosas") + " → " + bulto.code);
+          render();
+        } catch (e) {
+          ok.disabled = false; ok.textContent = "Meter a la caja";
+          toast(mensajeDeError(e));
+        }
+      };
+      foot.appendChild(ok);
+      var no = el("button", "btn", "Cancelar"); no.onclick = cerrar; foot.appendChild(no);
+    });
+  }
+
+  /* ---------- exportar Mis cosas ---------- */
+
+  function cosasParaExportar() { return cosasOrdenadas().filter(coincideCosa); }
+
+  function descripcionFiltros() {
+    var F = S.filtrosCosas, p = [];
+    var est = Object.keys(F.estados);
+    if (est.length) p.push(est.map(function (k) { return estadoCosa(k).n; }).join(" / "));
+    if (F.categoria) p.push(F.categoria);
+    if (F.ubicacion) p.push(F.ubicacion);
+    if (F.q) p.push("“" + F.q + "”");
+    return p.length ? p.join(" · ") : "todo el inventario";
+  }
+
+  $("cosasExcel").onclick = function () {
+    var list = cosasParaExportar();
+    if (!list.length) { toast("No hay nada que exportar con esos filtros."); return; }
+    var cab = ["Cantidad", "Qué es", "Categoría", "Dónde está", "Va en", "Bulto",
+      "Estado", "Precio unitario", "Total", "Notas"];
+    var filas = list.map(function (c) {
+      var b = c.bulto_id ? bultoPorId(c.bulto_id) : null;
+      var n = parseInt(c.cantidad, 10) || 0;
+      return [csvq(n), csvq(c.nombre), csvq(c.categoria), csvq(c.ubicacion),
+        csvq(c.destino), csvq(b ? b.code : ""), csvq(estadoCosa(c.estado).n),
+        csvq(c.precio == null ? "" : c.precio),
+        csvq(c.precio == null ? "" : c.precio * n), csvq(c.notas)].join(",");
+    });
+    bajaCSV("mis-cosas", cab, filas);
+    toast(list.length + " renglones exportados");
+  };
+
+  $("cosasPdf").onclick = function () {
+    var list = cosasParaExportar();
+    if (!list.length) { toast("No hay nada que imprimir con esos filtros."); return; }
+
+    var host = $("printArea"); clear(host);
+    host.appendChild(el("h1", null, "Mis cosas — Casa Jacarandas"));
+    var unidades = list.reduce(function (a, c) { return a + (parseInt(c.cantidad, 10) || 0); }, 0);
+    host.appendChild(el("div", "sub",
+      descripcionFiltros() + " · " + list.length + " renglones · " + unidades + " artículos · " +
+      new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })));
+
+    var t = el("table");
+    var th = el("thead"), trh = el("tr");
+    ["Cant.", "Qué es", "Categoría", "Dónde está", "Va en", "Bulto", "Estado", "Total"]
+      .forEach(function (h, i) {
+        var c = el("th", (i === 0 || i === 7) ? "num" : null, h);
+        trh.appendChild(c);
+      });
+    th.appendChild(trh); t.appendChild(th);
+
+    var tb = el("tbody"), suma = 0;
+    list.forEach(function (c) {
+      var b = c.bulto_id ? bultoPorId(c.bulto_id) : null;
+      var n = parseInt(c.cantidad, 10) || 0;
+      var tot = c.precio ? c.precio * n : 0;
+      suma += tot;
+      var tr = el("tr");
+      tr.appendChild(el("td", "num", String(n)));
+      tr.appendChild(el("td", null, c.nombre || ""));
+      tr.appendChild(el("td", null, c.categoria || ""));
+      tr.appendChild(el("td", null, c.ubicacion || ""));
+      tr.appendChild(el("td", null, c.destino || ""));
+      tr.appendChild(el("td", null, b ? b.code : ""));
+      tr.appendChild(el("td", null, estadoCosa(c.estado).n));
+      tr.appendChild(el("td", "num", tot ? pesos(tot) : ""));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+
+    if (suma > 0) {
+      var tf = el("tfoot"), trf = el("tr");
+      var td = el("td", null, "Suma de lo que tiene precio");
+      td.colSpan = 7;
+      trf.appendChild(td);
+      trf.appendChild(el("td", "num", pesos(suma)));
+      tf.appendChild(trf); t.appendChild(tf);
+    }
+    host.appendChild(t);
+
+    document.body.setAttribute("data-print", "cosas");
+    setTimeout(function () {
+      window.print();
+      setTimeout(function () { document.body.removeAttribute("data-print"); }, 400);
+    }, 60);
+  };
 
   var qtc = null;
   $("qCosas").oninput = function () {
@@ -1814,6 +2401,7 @@
     if (S.tab === "capturar") pintaCaptura();
     if (S.tab === "bultos") { pintaFiltros(counts); pintaToggleFiltros(); pintaGrid(); }
     if (S.tab === "cosas") pintaCosas();
+    pintaSelBar();
     if (S.tab === "resumen") pintaResumen();
     if (S.tab === "etiquetas") pintaEtiquetas();
     pintaRed();
@@ -1848,11 +2436,21 @@
   $("btnPrint").onclick = function () { window.print(); };
 
   /* red */
-  window.addEventListener("online", function () { pintaRed(); vaciarCola(); vaciarFotos(); recargar(); });
+  $("netBadge").onclick = async function () {
+    if (!cuantasPendientes()) return;
+    toast("Reintentando…");
+    await reintentaPendientes();
+    toast(cuantasPendientes() ? cuantasPendientes() + " siguen sin guardar" : "Todo quedó guardado");
+    render();
+  };
+  window.addEventListener("online", function () {
+    pintaRed(); vaciarCola(); vaciarFotos(); reintentaPendientes(); recargar();
+  });
   window.addEventListener("offline", pintaRed);
   setInterval(function () {
     if (queue().length) vaciarCola();
     if (fotosPend) vaciarFotos();
+    if (cuantasPendientes()) reintentaPendientes();
   }, 20000);
 
   /* =====================================================

@@ -11,36 +11,16 @@ Estado actual:
 
 ---
 
-## Paso A — Crear las tablas · 5 min
+## Paso A — La base de datos · 3 min
 
-Son **dos tandas**, y van por separado a propósito: el editor de Supabase corre
-todo en una sola transacción, así que si la segunda falla no se debe llevar
-entre las patas a la primera.
+1. Abre **`sql-TODO-EN-UNO.sql`** con el Bloc de notas.
+2. En la sección 4, borra de la lista de cuartos los que no existan en tu casa.
+3. Supabase → **SQL Editor** → **New query** → pega **el contenido completo del
+   archivo** (no el nombre) → **Run**.
+4. Al final te imprime una tabla de comprobación. Revísala: los correos con
+   acceso tienen que ser exactamente con los que entran a la app.
 
-1. Abre **`sql-1-base.sql`** con el Bloc de notas. Busca el renglón que dice
-   `CORREO-DE-TU-ESPOSA@gmail.com` y ponle el correo real de tu esposa.
-   **Ése es el único cambio.** Guarda.
-
-2. En Supabase: menú izquierdo → **SQL Editor** → **New query**.
-
-3. Copia **el contenido completo** del archivo (no el nombre del archivo —
-   ábrelo y copia el texto de adentro) y pégalo en el cuadro grande.
-
-4. Botón **Run** (o Ctrl+Enter). Debe decir **Success**.
-
-5. Borra todo lo del cuadro, abre **`sql-2-fotos.sql`**, copia su contenido,
-   pégalo y **Run** otra vez. También debe decir **Success**.
-
-6. Lo mismo con **`sql-3-cosas.sql`**: borra, pega, **Run**. Ésa crea el
-   inventario "Mis cosas" y agrega el campo de quién traslada cada bulto.
-
-> **Si la tanda 2 marca error** (algo como *"must be owner of table objects"*),
-> no pasa nada: la tanda 1 ya quedó y la app funciona, sólo sin fotos.
-> Créalo a mano así:
-> - **Storage** → *New bucket* → nombre `fotos` → **Private** → *Create*
-> - Dentro del bucket → pestaña **Policies** → *New policy* → *For full
->   customization* → marca **SELECT**, **INSERT** y **DELETE**, y en la
->   condición escribe `public.es_de_la_casa()` → *Save*.
+Es seguro correrlo las veces que quieras: no duplica ni borra nada que ya exista.
 
 ---
 
@@ -151,13 +131,31 @@ Es un inventario aparte de los bultos: **qué tengo y cuánto**, no en qué caja
 Sirve para dos cosas — saber que son cuatro amplificadores y no tres, y sacar la
 lista de lo que falta comprar.
 
-- Arriba escribes qué es, cuántos, y si **ya lo tienes**, **falta comprarlo** o
+- Arriba de todo hay una barra **"Estoy en"**: fijas una vez dónde estás
+  (Departamento · Sala) y a dónde va eso en la casa nueva. Se queda pegada, así
+  que recorres un cuarto anotando sin repetir la ubicación en cada renglón.
+- Luego escribes qué es, cuántos, y si **ya lo tienes**, **falta comprarlo** o
   está **por decidir**.
 - En la lista, los botones **−** y **+** ajustan la cantidad sin abrir nada.
 - Al tocar un renglón puedes ponerle categoría, cuarto destino, notas, precio
   por unidad y **en qué bulto viaja** (así lo encuentras después).
 - El precio es opcional; si lo pones, arriba te suma cuánto cuesta lo que falta.
-- Filtra por **Falta comprar** y ya tienes tu lista para la tienda.
+- Filtra por **Falta comprar** y ya tienes tu lista para la tienda; o por
+  **Dónde está** / **Categoría** para ver todo lo de un cuarto o de un tipo.
+
+### Armar cajas desde la lista
+
+Cada renglón tiene una casilla a la izquierda. Palomea varias cosas y abajo
+aparece una barra: **Mandar a una caja**.
+
+- **Caja nueva** — te muestra el número que le toca, y ya trae sugerido el
+  cuarto destino más repetido entre lo que elegiste. Le pones dónde se guarda,
+  quién la traslada, y listo: la caja se crea con esas cosas como contenido.
+- **Caja que ya existe** — se agregan al contenido de la que elijas. La lista
+  muestra primero la más reciente, que normalmente es la que estás llenando.
+
+En los dos casos, cada cosa queda ligada a su caja: en Mis cosas vas a ver su
+número (`DEP-012`) y así sabes dónde quedó sin abrir nada.
 
 ### Sobre las fotos
 
@@ -216,8 +214,6 @@ celular a veces hay que cerrar y abrir la app dos veces.
 |---|---|
 | `index.html`, `styles.css`, `app.js` | La app. |
 | `config.js` | Tus claves de Supabase. Ya está listo. |
-| `sql-1-base.sql` | Tablas y permisos. Se corre una vez (Paso A). |
-| `sql-2-fotos.sql` | El almacén de fotos. Se corre aparte, después. |
-| `sql-3-cosas.sql` | Inventario "Mis cosas" y el campo de traslado. |
+| `sql-TODO-EN-UNO.sql` | Toda la base de datos en un solo archivo (Paso A). |
 | `sw.js`, `manifest.webmanifest`, `icon-*` | Lo que la hace instalable y usable sin internet. |
 | `.nojekyll` | Le dice a GitHub Pages que publique tal cual. No lo borres. |
