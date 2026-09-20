@@ -77,6 +77,7 @@
     <nav class="tabs wrap" role="tablist">
       <button class="tab" role="tab" data-tab="capturar"  aria-selected="true">Capturar</button>
       <button class="tab" role="tab" data-tab="bultos"    aria-selected="false">Bultos</button>
+      <button class="tab" role="tab" data-tab="cosas"     aria-selected="false">Mis cosas</button>
       <button class="tab" role="tab" data-tab="resumen"   aria-selected="false">Resumen</button>
       <button class="tab" role="tab" data-tab="etiquetas" aria-selected="false">Etiquetas</button>
     </nav>
@@ -110,6 +111,10 @@
           <span>Dónde se guarda</span>
           <input type="text" id="cLugar" placeholder="Alacena, repisa de arriba">
         </label>
+        <label class="fl">
+          <span>Quién lo traslada</span>
+          <div class="seg" id="segTraslado"></div>
+        </label>
         <div class="f2">
           <label class="fl">
             <span>Qué es</span>
@@ -124,16 +129,18 @@
       </div>
 
       <div class="cap">
+        <div class="tipos" id="tipos" role="group" aria-label="Qué estás registrando"></div>
+
         <div class="cap-code">
-          <span class="cap-code-k">Escribe en la caja</span>
+          <span class="cap-code-k" id="capCodeK">Escribe en la caja</span>
           <span class="cap-code-v" id="nextCode">—</span>
         </div>
 
         <label class="fl cap-field">
-          <span>¿Qué va adentro?</span>
+          <span id="capFieldK">¿Qué va adentro?</span>
           <textarea id="capContenido" rows="4" autocomplete="off"
             placeholder="los platos de la vajilla de la abuela"></textarea>
-          <span class="hint">Una nota breve basta. Si quieres listar, un objeto por renglón. Ctrl + Enter guarda.</span>
+          <span class="hint" id="capHint">Una nota breve basta. Ctrl + Enter guarda.</span>
         </label>
 
         <div class="cap-tools">
@@ -145,7 +152,7 @@
 
         <div class="cap-tools">
           <label class="chk"><input type="checkbox" id="capFragil"> Frágil</label>
-          <label class="chk"><input type="checkbox" id="capPrimero"> Abrir primero</label>
+          <label class="chk"><input type="checkbox" id="capPrimero"> <span id="capPrimeroTxt">Abrir primero</span></label>
         </div>
 
         <button class="btn btn-p btn-xl" id="btnSaveNext" type="button">Guardar y siguiente →</button>
@@ -177,6 +184,9 @@
           </div>
           <div class="tb-row">
             <div class="chips" id="chipsOrigen"></div>
+            <div class="chips" id="chipsTraslado"></div>
+          </div>
+          <div class="tb-row">
             <div class="chips">
               <button class="chip-f" id="chipFrag"   aria-pressed="false">Frágil</button>
               <button class="chip-f" id="chipFirst"  aria-pressed="false">Abrir primero</button>
@@ -186,6 +196,33 @@
         </div>
       </div>
       <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- ---------- MIS COSAS ---------- -->
+    <section id="viewCosas" class="view wrap" hidden>
+      <form class="cosa-add" id="cosaForm">
+        <input type="text" id="cosaNombre" placeholder="Amplificador Sonos Amp" autocomplete="off" required>
+        <div class="cosa-add-row">
+          <input type="number" id="cosaCant" value="1" min="1" step="1" inputmode="numeric" aria-label="Cantidad">
+          <select id="cosaEstado" aria-label="Estado"></select>
+          <button class="btn btn-p" type="submit">Agregar</button>
+        </div>
+      </form>
+
+      <div class="panel" id="cosasStats"></div>
+
+      <div class="toolbar no-print">
+        <div class="tb-row">
+          <div class="search">
+            <span class="mag" aria-hidden="true">⌕</span>
+            <input type="search" id="qCosas" placeholder="Buscar “sonos”, “sartén”, “cables”…" autocomplete="off">
+          </div>
+        </div>
+        <div class="tb-row"><div class="chips" id="chipsCosaEstado"></div></div>
+        <div class="tb-row" id="catRow"></div>
+      </div>
+
+      <div class="cosas" id="cosasList"></div>
     </section>
 
     <!-- ---------- RESUMEN ---------- -->
@@ -207,6 +244,7 @@
   <nav class="botnav no-print" id="botnav">
     <button data-tab="capturar"  class="bn" aria-selected="true"><b>＋</b>Capturar</button>
     <button data-tab="bultos"    class="bn" aria-selected="false"><b>▤</b>Bultos</button>
+    <button data-tab="cosas"     class="bn" aria-selected="false"><b>≡</b>Cosas</button>
     <button data-tab="resumen"   class="bn" aria-selected="false"><b>◱</b>Resumen</button>
     <button data-tab="etiquetas" class="bn" aria-selected="false"><b>❏</b>Etiquetas</button>
   </nav>

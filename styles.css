@@ -175,16 +175,16 @@ textarea{resize:vertical; min-height:80px; line-height:1.4}
   .top-in .btn-sm{padding:7px 10px}
   #main{padding-bottom:calc(74px + var(--safe-b))}
   .botnav{
-    display:grid; grid-template-columns:repeat(4,1fr);
+    display:grid; grid-template-columns:repeat(5,1fr);
     position:fixed; left:0; right:0; bottom:0; z-index:40;
     background:var(--surface); border-top:1px solid var(--line);
     padding-bottom:var(--safe-b);
   }
   .bn{
-    background:none; border:0; padding:9px 4px 10px; cursor:pointer;
+    background:none; border:0; padding:9px 1px 10px; cursor:pointer;
     display:grid; gap:2px; justify-items:center; color:var(--ink-3);
-    font-size:11px; font-weight:600; font-family:var(--ff-disp);
-    text-transform:uppercase; letter-spacing:.05em;
+    font-size:10px; font-weight:600; font-family:var(--ff-disp);
+    text-transform:uppercase; letter-spacing:.02em;
   }
   .bn b{font-size:19px; line-height:1; font-weight:400}
   .bn[aria-selected="true"]{color:var(--accent)}
@@ -214,6 +214,17 @@ textarea{resize:vertical; min-height:80px; line-height:1.4}
   margin-top:12px; background:var(--surface); border:1px solid var(--line);
   border-radius:14px; box-shadow:var(--shadow); padding:18px 16px 16px;
   display:grid; gap:14px; max-width:620px;
+}
+.tipos{display:grid; grid-template-columns:repeat(4,1fr); gap:5px}
+.tipos button{
+  border:1px solid var(--line); background:var(--surface-2); color:var(--ink-2);
+  border-radius:9px; padding:9px 4px 8px; cursor:pointer; display:grid; gap:2px;
+  justify-items:center; font-family:var(--ff-disp); text-transform:uppercase;
+  letter-spacing:.04em; font-size:11.5px; font-weight:600; line-height:1.1;
+}
+.tipos button b{font-size:18px; line-height:1; font-weight:400}
+.tipos button[aria-pressed="true"]{
+  background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
 }
 .cap-code{display:grid; gap:1px; justify-items:center; text-align:center}
 .cap-code-k{font-family:var(--ff-disp); text-transform:uppercase; letter-spacing:.09em;
@@ -306,6 +317,11 @@ textarea{resize:vertical; min-height:80px; line-height:1.4}
   padding:2px 7px; border-radius:5px; font-family:var(--ff-disp)}
 .tag-frag{background:var(--red-soft); color:var(--red)}
 .tag-first{background:var(--amber-soft); color:var(--amber)}
+.tag-yo{background:var(--blue-soft); color:var(--blue)}
+.label .lyo{
+  border:2px solid var(--ink); border-radius:4px; padding:3px 7px; font-family:var(--ff-disp);
+  font-weight:700; text-transform:uppercase; letter-spacing:.08em; font-size:13px; text-align:center;
+}
 .b-foot{display:flex; align-items:center; gap:6px; margin-top:auto; padding-top:8px;
   border-top:1px solid var(--line)}
 .who{font-size:11.5px; color:var(--ink-3); margin-left:auto; text-align:right; line-height:1.25}
@@ -314,6 +330,42 @@ textarea{resize:vertical; min-height:80px; line-height:1.4}
   border:1px dashed var(--line-2); border-radius:var(--r); background:var(--surface-2)}
 .empty b{display:block; color:var(--ink); font-family:var(--ff-disp); font-size:20px;
   text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px}
+
+/* ---------- mis cosas ---------- */
+.cosa-add{
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  box-shadow:var(--shadow); padding:13px; display:grid; gap:9px; margin-bottom:14px;
+}
+.cosa-add-row{display:grid; grid-template-columns:82px 1fr auto; gap:8px}
+.cosa-add-row input[type=number]{text-align:center; font-family:var(--ff-mono); font-weight:600}
+
+.cosas{display:grid; gap:8px; padding-bottom:30px}
+.cosa{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  display:flex; align-items:stretch; overflow:hidden; box-shadow:var(--shadow);
+}
+.cosa .stripe{width:4px; flex:0 0 4px}
+.cosa-cant{
+  flex:0 0 auto; display:flex; align-items:center; gap:2px; padding:8px 6px 8px 9px;
+}
+.cosa-cant button{
+  width:28px; height:28px; border-radius:7px; border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--ink-2); cursor:pointer;
+  font-size:16px; line-height:1; padding:0; font-weight:600;
+}
+.cosa-cant button:hover{border-color:var(--accent); color:var(--accent)}
+.cosa-n{
+  min-width:34px; text-align:center; font-family:var(--ff-mono); font-weight:600;
+  font-size:16px; font-variant-numeric:tabular-nums;
+}
+.cosa-mid{flex:1; min-width:0; padding:9px 10px 9px 4px; display:grid; gap:2px; cursor:pointer}
+.cosa-nom{font-weight:600; font-size:15px; line-height:1.25}
+.cosa-meta{font-size:12.5px; color:var(--ink-3)}
+.cosa-right{display:flex; align-items:center; padding-right:11px}
+.cosa-precio{
+  font-family:var(--ff-mono); font-size:12px; color:var(--ink-3);
+  font-variant-numeric:tabular-nums; white-space:nowrap; margin-right:8px;
+}
 
 /* ---------- resumen ---------- */
 .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow)}

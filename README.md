@@ -31,6 +31,9 @@ entre las patas a la primera.
 5. Borra todo lo del cuadro, abre **`sql-2-fotos.sql`**, copia su contenido,
    pégalo y **Run** otra vez. También debe decir **Success**.
 
+6. Lo mismo con **`sql-3-cosas.sql`**: borra, pega, **Run**. Ésa crea el
+   inventario "Mis cosas" y agrega el campo de quién traslada cada bulto.
+
 > **Si la tanda 2 marca error** (algo como *"must be owner of table objects"*),
 > no pasa nada: la tanda 1 ya quedó y la app funciona, sólo sin fotos.
 > Créalo a mano así:
@@ -117,6 +120,13 @@ La pantalla **Capturar** está hecha para que sólo escribas lo que cambia:
 4. **Guardar y siguiente** → te muestra el número (`DEP-047`); lo marcas con
    plumón en la caja y sigues. El contexto no se pierde.
 
+**No todo va en caja.** Arriba de todo hay cuatro botones: **Caja**, **Mueble**,
+**Aparato** y **Suelto**. Tócalos y la pantalla cambia sola: para un colchón te
+pregunta *"¿qué mueble es?"* y en vez de *"escribe en la caja"* dice *"pégale
+esta etiqueta"*. El colchón, la lavadora y el congelador se registran igual que
+una caja — con su número, su cuarto destino y su foto — sólo que la etiqueta se
+pega con cinta en vez de escribirse con plumón.
+
 Atajos que ahorran tiempo de verdad:
 
 - **Pegar una lista** — un renglón por caja, crea todas de golpe.
@@ -125,7 +135,29 @@ Atajos que ahorran tiempo de verdad:
 - **Deshacer último** si te equivocaste en la que acabas de guardar.
 
 Marca **Abrir primero** en 5 o 6 cajas (sábanas, toallas, medicinas,
-cargadores, papel de baño, cafetera). Ésas viajan contigo, no en el camión.
+cargadores, papel de baño, cafetera).
+
+### Quién lo traslada
+
+En *Cambiar* eliges si el bulto se lo lleva la **mudanzera** o **lo llevas tú**.
+Se queda pegado igual que el cuarto, así que capturas de corrido las cajas que
+van contigo. Un bulto marcado "lo llevo yo" sale con etiqueta azul en la lista y
+su etiqueta impresa dice **NO SUBIR AL CAMIÓN**, para que nadie lo cargue por
+error. En *Resumen* tienes el conteo de cada uno — útil para pedir cotización.
+
+### Mis cosas
+
+Es un inventario aparte de los bultos: **qué tengo y cuánto**, no en qué caja va.
+Sirve para dos cosas — saber que son cuatro amplificadores y no tres, y sacar la
+lista de lo que falta comprar.
+
+- Arriba escribes qué es, cuántos, y si **ya lo tienes**, **falta comprarlo** o
+  está **por decidir**.
+- En la lista, los botones **−** y **+** ajustan la cantidad sin abrir nada.
+- Al tocar un renglón puedes ponerle categoría, cuarto destino, notas, precio
+  por unidad y **en qué bulto viaja** (así lo encuentras después).
+- El precio es opcional; si lo pones, arriba te suma cuánto cuesta lo que falta.
+- Filtra por **Falta comprar** y ya tienes tu lista para la tienda.
 
 ### Sobre las fotos
 
@@ -149,7 +181,8 @@ Supabase → *Table Editor* → tabla `permitidos` → *Insert row* → su corre
 Dentro de la app: botón **Ajustes**.
 
 **Respaldo**
-Dentro de la app: **Ajustes** → *Descargar respaldo (CSV)*. Ábrelo en Excel.
+Dentro de la app: **Ajustes** → *Respaldo de bultos* y *Respaldo de mis cosas*.
+Los dos bajan en CSV y abren en Excel.
 Hazlo una vez a la semana y el día antes de la mudanza.
 
 **Actualizar la app**
@@ -185,5 +218,6 @@ celular a veces hay que cerrar y abrir la app dos veces.
 | `config.js` | Tus claves de Supabase. Ya está listo. |
 | `sql-1-base.sql` | Tablas y permisos. Se corre una vez (Paso A). |
 | `sql-2-fotos.sql` | El almacén de fotos. Se corre aparte, después. |
+| `sql-3-cosas.sql` | Inventario "Mis cosas" y el campo de traslado. |
 | `sw.js`, `manifest.webmanifest`, `icon-*` | Lo que la hace instalable y usable sin internet. |
 | `.nojekyll` | Le dice a GitHub Pages que publique tal cual. No lo borres. |

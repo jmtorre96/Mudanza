@@ -1,6 +1,6 @@
 /* Service worker: deja que la app abra sin internet.
    Sube el número de VERSION cuando cambies archivos. */
-const VERSION = "mudanza-v1";
+const VERSION = "mudanza-v3";
 const SHELL = [
   "./", "./index.html", "./styles.css", "./app.js", "./config.js",
   "./manifest.webmanifest", "./icon.svg",
