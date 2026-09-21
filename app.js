@@ -1182,6 +1182,9 @@
   function pintaGrid() {
     var g = $("grid"); clear(g);
     var list = filtrados();
+    $("bultosCuenta").textContent = list.length
+      ? list.length + (list.length === 1 ? " bulto" : " bultos")
+      : "";
     if (!list.length) {
       var e = el("div", "empty");
       e.appendChild(el("b", null, S.bultos.length ? "Nada con esos filtros" : "Todavía no hay bultos"));
@@ -1193,6 +1196,82 @@
     list.forEach(function (b) { g.appendChild(tarjeta(b)); });
     resuelveFotos();
   }
+
+  /* ---------- exportar Bultos ---------- */
+
+  function descripcionFiltrosBultos() {
+    var F = S.filtros, p = [];
+    var est = Object.keys(F.estados);
+    if (est.length) p.push(est.map(function (k) { return estadoDef(k).n; }).join(" / "));
+    var ori = Object.keys(F.origenes);
+    if (ori.length) p.push(ori.join(" / "));
+    if (F.destino) p.push("→ " + F.destino);
+    if (F.traslado) p.push(trasladoDef(F.traslado).n);
+    if (F.frag) p.push("frágiles");
+    if (F.first) p.push("abrir primero");
+    if (F.q) p.push("“" + F.q + "”");
+    return p.length ? p.join(" · ") : "todos los bultos";
+  }
+
+  $("bultosExcel").onclick = function () {
+    var list = filtrados();
+    if (!list.length) { toast("No hay nada que exportar con esos filtros."); return; }
+    var cab = ["Código", "Qué es", "Viene de", "Cuarto de origen", "Va en",
+      "Dónde se guarda", "Contenido", "Estado", "Traslado", "Frágil",
+      "Abrir primero", "Fotos", "Notas"];
+    var filas = list.map(function (b) {
+      return [csvq(b.code), csvq(tipoNombre(b.tipo)), csvq(b.origen), csvq(b.cuarto_origen),
+        csvq(b.destino), csvq(b.lugar), csvq((b.contenido || []).join(" · ")),
+        csvq(estadoDef(b.estado).n), csvq(trasladoDef(b.traslado).n),
+        csvq(b.fragil ? "Sí" : ""), csvq(b.abrir_primero ? "Sí" : ""),
+        csvq((b.fotos || []).length), csvq(b.notas)].join(",");
+    });
+    bajaCSV("bultos", cab, filas);
+    toast(list.length + " bultos exportados");
+  };
+
+  $("bultosPdf").onclick = function () {
+    var list = filtrados();
+    if (!list.length) { toast("No hay nada que imprimir con esos filtros."); return; }
+
+    var host = $("printArea"); clear(host);
+    host.appendChild(el("h1", null, "Bultos — Casa Jacarandas"));
+    host.appendChild(el("div", "sub",
+      descripcionFiltrosBultos() + " · " + list.length +
+      (list.length === 1 ? " bulto · " : " bultos · ") +
+      new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })));
+
+    var t = el("table");
+    var th = el("thead"), trh = el("tr");
+    ["Código", "Viene de", "Va en", "Dónde se guarda", "Contenido", "Estado", "Traslado", "Ojo"]
+      .forEach(function (h) { trh.appendChild(el("th", null, h)); });
+    th.appendChild(trh); t.appendChild(th);
+
+    var tb = el("tbody");
+    list.forEach(function (b) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, b.code || ""));
+      tr.appendChild(el("td", null, (b.origen || "") + (b.cuarto_origen ? " · " + b.cuarto_origen : "")));
+      tr.appendChild(el("td", null, b.destino || ""));
+      tr.appendChild(el("td", null, b.lugar || ""));
+      tr.appendChild(el("td", null, (b.contenido || []).join(" · ")));
+      tr.appendChild(el("td", null, estadoDef(b.estado).n));
+      tr.appendChild(el("td", null, trasladoDef(b.traslado).n));
+      var ojo = [];
+      if (b.fragil) ojo.push("FRÁGIL");
+      if (b.abrir_primero) ojo.push("ABRIR 1º");
+      tr.appendChild(el("td", null, ojo.join(" · ")));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    host.appendChild(t);
+
+    document.body.setAttribute("data-print", "bultos");
+    setTimeout(function () {
+      window.print();
+      setTimeout(function () { document.body.removeAttribute("data-print"); }, 400);
+    }, 60);
+  };
 
   /* =====================================================
      RESUMEN
@@ -2311,7 +2390,9 @@
     host.appendChild(el("h1", null, "Mis cosas — Casa Jacarandas"));
     var unidades = list.reduce(function (a, c) { return a + (parseInt(c.cantidad, 10) || 0); }, 0);
     host.appendChild(el("div", "sub",
-      descripcionFiltros() + " · " + list.length + " renglones · " + unidades + " artículos · " +
+      descripcionFiltros() + " · " + list.length +
+      (list.length === 1 ? " renglón · " : " renglones · ") + unidades +
+      (unidades === 1 ? " artículo · " : " artículos · ") +
       new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })));
 
     var t = el("table");

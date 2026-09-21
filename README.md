@@ -117,6 +117,18 @@ Atajos que ahorran tiempo de verdad:
 Marca **Abrir primero** en 5 o 6 cajas (sábanas, toallas, medicinas,
 cargadores, papel de baño, cafetera).
 
+### Descargar la lista
+
+Tanto **Bultos** como **Mis cosas** tienen abajo de los filtros dos botones:
+
+- **⤓ Excel** — baja un CSV que abre directo en Excel.
+- **⎙ PDF** — arma una tabla limpia y abre el diálogo de impresión; ahí eliges
+  *Guardar como PDF*.
+
+Los dos **respetan los filtros que tengas puestos**. Filtra "Falta comprar" y
+dale PDF: ésa es tu lista para la tienda. Filtra por "Cocina" y dale Excel: ésa
+es la relación de esa habitación para la mudanzera.
+
 ### Quién lo traslada
 
 En *Cambiar* eliges si el bulto se lo lleva la **mudanzera** o **lo llevas tú**.
